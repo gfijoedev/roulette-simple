@@ -32,7 +32,7 @@ impl Default for Contract {
     fn default() -> Self {
         Self {
             rounds: 0,
-            house: 2_000_000_000_000_000_000_000_000,
+            house: 5_000_000_000_000_000_000_000_000,
             payout: 0,
         }
     }
@@ -50,7 +50,9 @@ impl Contract {
 
         let bet = &bets[0];
         let amount = bet.amount;
-        require!(deposit == amount, "Deposit must be 0.1 NEAR");
+        require!(deposit == amount, "deposit != bet amount");
+
+        require!(roulette::bet_legal(bet), "illegal bet");
 
         self.house = self
             .house
@@ -81,7 +83,7 @@ impl Contract {
         #[callback_result] call_result: Result<SignatureResponse, PromiseError>,
         account_id: AccountId,
         bets: Vec<roulette::Bet>,
-    ) -> (bool, u8, u8) {
+    ) -> (bool, u8, bool, u8) {
         match call_result {
             Ok(signature_response) => {
                 // get bytes from signature
@@ -90,14 +92,12 @@ impl Contract {
                     .expect("failed to decode scalar to bytes");
 
                 let bet = &bets[0];
-                let (win, number, multiple) = roulette::bet_eval(s_bytes[0], bet);
+                let (win, number, red, multiple) = roulette::bet_eval(s_bytes[0], bet);
 
                 let amount = bet.amount.as_yoctonear();
                 if multiple > 0 {
                     let payout = amount
-                        .checked_mul(multiple as u128)
-                        .expect("payout overflow")
-                        .checked_add(amount)
+                        .checked_mul((multiple + 1) as u128)
                         .expect("payout overflow");
 
                     self.house = self.house.checked_sub(payout).expect("house empty");
@@ -106,11 +106,11 @@ impl Contract {
                     Promise::new(account_id).transfer(NearToken::from_yoctonear(payout));
                 }
 
-                (win, number, multiple)
+                (win, number, red, multiple)
             }
             Err(error) => {
                 env::log_str(&format!("mpc callback failed with error: {:?}", error));
-                (false, 0, 0)
+                (false, 0, false, 0)
             }
         }
     }

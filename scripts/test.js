@@ -88,13 +88,6 @@ async function call(methodName, args, deposit = 0n, gas = 30000000000000n) {
 
 const REDEPLOY_CONTRACT = process.env.DEPLOY_CONTRACT || false;
 
-// game logic
-
-const NUMBER_MAPPING = [
-  0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24,
-  16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26,
-];
-
 async function test() {
   if (REDEPLOY_CONTRACT) {
     await deleteAccount(NEAR_CONTRACT_ID);
@@ -111,24 +104,35 @@ async function test() {
   // test calls
 
   while (true) {
-    const [win, number, multiple] = await call(
+    const [win, number, red, multiple] = await call(
       'spin',
       {
         bets: [
           {
-            kind: 'Red',
-            numbers: [32],
+            kind: 'Even',
+            numbers: [],
             amount: parseNearAmount('0.1'),
           },
         ],
+        // [
+        //   {
+        //     kind: 'Red',
+        //     numbers: [32],
+        //     amount: parseNearAmount('0.1'),
+        //   },
+        // ],
+        // [
+        //   {
+        //     kind: 'Red',
+        //     numbers: [32],
+        //     amount: parseNearAmount('0.1'),
+        //   },
+        // ],
       },
       parseNearAmount('0.1'),
     );
     console.log('!---!');
-    console.log(
-      number,
-      NUMBER_MAPPING.findIndex((n) => n === number) % 2 === 0 ? 'black' : 'red',
-    );
+    console.log(number, red ? 'red' : 'black');
     console.log('payout', win ? multiple + 1 : 0, 'x bet');
   }
 }
