@@ -42,7 +42,7 @@ pub struct Bet {
     pub numbers: Vec<u8>,
 }
 
-pub fn bet_eval(rng_val: u8, bet: &Bet) -> u8 {
+pub fn bet_eval(rng_val: u8, bet: &Bet) -> (bool, u8, u8) {
     let index = rng_val % 37;
     let number = NUMBER_MAPPING[index as usize];
     let (win, multiple) = match bet.kind {
@@ -53,8 +53,8 @@ pub fn bet_eval(rng_val: u8, bet: &Bet) -> u8 {
     };
 
     if win {
-        multiple
+        (win, number, multiple)
     } else {
-        0
+        (false, number, 0)
     }
 }

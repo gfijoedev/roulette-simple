@@ -32,7 +32,7 @@ impl Default for Contract {
     fn default() -> Self {
         Self {
             rounds: 0,
-            house: 0,
+            house: 2_000_000_000_000_000_000_000_000,
             payout: 0,
         }
     }
@@ -81,7 +81,7 @@ impl Contract {
         #[callback_result] call_result: Result<SignatureResponse, PromiseError>,
         account_id: AccountId,
         bets: Vec<roulette::Bet>,
-    ) -> u8 {
+    ) -> (bool, u8, u8) {
         match call_result {
             Ok(signature_response) => {
                 // get bytes from signature
@@ -90,7 +90,7 @@ impl Contract {
                     .expect("failed to decode scalar to bytes");
 
                 let bet = &bets[0];
-                let multiple = roulette::bet_eval(s_bytes[0], bet);
+                let (win, number, multiple) = roulette::bet_eval(s_bytes[0], bet);
 
                 let amount = bet.amount.as_yoctonear();
                 if multiple > 0 {
@@ -106,11 +106,11 @@ impl Contract {
                     Promise::new(account_id).transfer(NearToken::from_yoctonear(payout));
                 }
 
-                multiple
+                (win, number, multiple)
             }
             Err(error) => {
                 env::log_str(&format!("mpc callback failed with error: {:?}", error));
-                0
+                (false, 0, 0)
             }
         }
     }
