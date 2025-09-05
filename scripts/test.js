@@ -110,7 +110,7 @@ async function test() {
         bets: [
           {
             kind: 'Even',
-            numbers: [],
+            number: 0,
             amount: parseNearAmount('0.1'),
           },
         ],

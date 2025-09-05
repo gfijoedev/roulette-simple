@@ -8,7 +8,7 @@ use near_sdk::{
 use omni_transaction::signer::types::SignatureResponse;
 
 mod chain_signature;
-mod roulette;
+pub mod roulette;
 
 const CALLBACK_GAS: Gas = Gas::from_tgas(5);
 

@@ -17,12 +17,6 @@ hex = "0.4.3"
 near-sdk = "5.4.0"
 omni-transaction = "0.2.3"
 
-[dev-dependencies]
-near-sdk = { version = "5.4.0", features = ["unit-testing"] }
-near-workspaces = { version = "0.14.1", features = ["unstable"] }
-tokio = { version = "1.12.0", features = ["full"] }
-serde_json = "1"
-
 [profile.release]
 codegen-units = 1
 # Tell `rustc` to optimize for small code size.
@@ -32,3 +26,6 @@ debug = false
 panic = "abort"
 # Opt into extra safety checks on arithmetic operations https://stackoverflow.com/a/64136471/249801
 overflow-checks = true
+
+[dev-dependencies]
+rand = "0.9.2"
