@@ -37,7 +37,7 @@ async function createAccount(accountId) {
     await account.createAccount(
       accountId,
       (await signer.getPublicKey()).toString(),
-      parseNearAmount('5'),
+      parseNearAmount('100'),
     );
     console.log('Account created', accountId);
   } catch (e) {
@@ -55,10 +55,9 @@ async function deployContract(accountId, path) {
   }
 }
 
-async function view(methodName, args) {
+async function view(methodName, args = {}) {
   try {
     const res = await provider.callFunction(NEAR_CONTRACT_ID, methodName, args);
-    console.log('View result:', res);
     return res;
   } catch (e) {
     console.log('Error calling', methodName, e);
@@ -67,7 +66,7 @@ async function view(methodName, args) {
 
 // contract call
 
-async function call(methodName, args, deposit = 0n, gas = 30000000000000n) {
+async function call(methodName, args, deposit = 0n, gas = 18000000000000n) {
   const account = new Account(NEAR_ACCOUNT_ID, provider, signer);
   try {
     const res = await account.callFunction({
@@ -86,7 +85,26 @@ async function call(methodName, args, deposit = 0n, gas = 30000000000000n) {
 
 // test run const
 
+const VERBOSE = false;
 const REDEPLOY_CONTRACT = process.env.DEPLOY_CONTRACT || false;
+
+async function getStats() {
+  // get stats
+  const [spins, bets, house, payout] = await view('stats');
+  console.log(
+    'bets:',
+    bets,
+    '\t',
+    'wagered:',
+    bets / 10,
+    '\t',
+    'house:',
+    formatNearAmount(house, 4),
+    '\t',
+    'payout:',
+    formatNearAmount(payout, 4),
+  );
+}
 
 async function test() {
   if (REDEPLOY_CONTRACT) {
@@ -103,37 +121,112 @@ async function test() {
 
   // test calls
 
-  while (true) {
-    const [win, number, red, multiple] = await call(
-      'spin',
+  let rounds = 0;
+  while (true && rounds < 1000) {
+    rounds++;
+
+    const bets = [
+      // Inside Bets
       {
-        bets: [
-          {
-            kind: 'Even',
-            number: 0,
-            amount: parseNearAmount('0.1'),
-          },
-        ],
-        // [
-        //   {
-        //     kind: 'Red',
-        //     numbers: [32],
-        //     amount: parseNearAmount('0.1'),
-        //   },
-        // ],
-        // [
-        //   {
-        //     kind: 'Red',
-        //     numbers: [32],
-        //     amount: parseNearAmount('0.1'),
-        //   },
-        // ],
+        kind: 'Straight',
+        number: 1,
+        amount: parseNearAmount('0.1'),
       },
-      parseNearAmount('0.1'),
-    );
-    console.log('!---!');
-    console.log(number, red ? 'red' : 'black');
-    console.log('payout', win ? multiple + 1 : 0, 'x bet');
+      {
+        kind: 'Split',
+        number: 0,
+        amount: parseNearAmount('0.1'),
+      },
+      {
+        kind: 'Street',
+        number: 0,
+        amount: parseNearAmount('0.1'),
+      },
+      {
+        kind: 'Corner',
+        number: 0,
+        amount: parseNearAmount('0.1'),
+      },
+      {
+        kind: 'SixLine',
+        number: 0,
+        amount: parseNearAmount('0.1'),
+      },
+      // Outside Bets
+      {
+        kind: 'Column',
+        number: 0,
+        amount: parseNearAmount('0.1'),
+      },
+      {
+        kind: 'Dozen',
+        number: 0,
+        amount: parseNearAmount('0.1'),
+      },
+      {
+        kind: 'Red',
+        number: 0,
+        amount: parseNearAmount('0.1'),
+      },
+      {
+        kind: 'Black',
+        number: 0,
+        amount: parseNearAmount('0.1'),
+      },
+      {
+        kind: 'Odd',
+        number: 0,
+        amount: parseNearAmount('0.1'),
+      },
+      {
+        kind: 'Even',
+        number: 0,
+        amount: parseNearAmount('0.1'),
+      },
+      {
+        kind: 'Low',
+        number: 0,
+        amount: parseNearAmount('0.1'),
+      },
+      {
+        kind: 'High',
+        number: 0,
+        amount: parseNearAmount('0.1'),
+      },
+    ];
+    const spins = [bets, bets, bets, bets];
+
+    let deposit = BigInt('0');
+    for (const bets of spins) {
+      for (const bet of bets) {
+        deposit += BigInt(bet.amount);
+      }
+    }
+    const spinResults = await call('spin', { spins, callback_gas: 3 }, deposit);
+    let totalMultiple = 0;
+    for (const [i, betResults] of spinResults.entries()) {
+      for (const [j, betResult] of betResults.entries()) {
+        const [win, number, red, multiple] = betResult;
+        const payoutMultiple = win ? multiple + 1 : 0;
+        if (VERBOSE) {
+          console.log(
+            'Bet:',
+            spins[i][j].kind,
+            '\t\tResult:',
+            number,
+            red ? 'red' : 'black',
+            '\t\tPayout:',
+            payoutMultiple,
+            'x bet',
+          );
+        }
+        totalMultiple += payoutMultiple;
+      }
+    }
+    console.log('total payout: ', totalMultiple);
+
+    await wait();
+    await getStats();
   }
 }
 

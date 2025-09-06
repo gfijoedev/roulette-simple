@@ -3,14 +3,11 @@ use crate::*;
 #[near(serializers = [json, borsh])]
 pub enum BetKind {
     // Inside Bets
-    Straight, // Single number
+    Straight,
     Split,
     Street,
     Corner,
-    SixLine, // Double Street
-    // Trio,      // 0-1-2 or 0-2-3
-    // FirstFour, // 0-1-2-3
-
+    SixLine,
     // Outside Bets
     Column,
     Dozen,
@@ -18,15 +15,8 @@ pub enum BetKind {
     Black,
     Odd,
     Even,
-    Low, // 1-18
-    High, // 19-36
-
-         // // Call (Announced) Bets
-         // VoisinsDuZero,
-         // TiersDuCylindre,
-         // Orphelins,
-         // Neighbors, // A number + neighbors
-         // Finals,    // Numbers ending with same digit
+    Low,
+    High,
 }
 
 #[near(serializers = [json, borsh])]
@@ -38,13 +28,13 @@ pub struct Bet {
 
 pub fn bet_legal(bet: &Bet) -> bool {
     match bet.kind {
-        BetKind::Straight => bet.number == 1,
-        BetKind::Split => bet.number < 57,   // index of SPLIT_BETS
-        BetKind::Street => bet.number < 12,  // ..
-        BetKind::Corner => bet.number < 22,  // ..
-        BetKind::SixLine => bet.number < 11, // ..
-        BetKind::Column => bet.number < 3,   // calc manually
-        BetKind::Dozen => bet.number < 3,    // calc manually
+        BetKind::Straight => bet.number > 0 && bet.number < 37,
+        BetKind::Split => bet.number < SPLIT_BETS.len() as u8, // index of SPLIT_BETS
+        BetKind::Street => bet.number < STREET_BETS.len() as u8, // ..
+        BetKind::Corner => bet.number < CORNER_BETS.len() as u8, // ..
+        BetKind::SixLine => bet.number < SIX_LINE_BETS.len() as u8, // ..
+        BetKind::Column => bet.number < 3,                     // calc manually
+        BetKind::Dozen => bet.number < 3,                      // calc manually
         BetKind::Black => true,
         BetKind::Red => true,
         BetKind::Odd => true,
@@ -87,7 +77,6 @@ pub fn bet_eval(rng_val: u8, bet: &Bet) -> (bool, u8, bool, u8) {
         BetKind::Even => (number > 0 && number % 2 == 0, 1),
         BetKind::Low => (number > 0 && number < 19, 1),
         BetKind::High => (number > 18, 1),
-        _ => (false, 0),
     };
 
     if win {
