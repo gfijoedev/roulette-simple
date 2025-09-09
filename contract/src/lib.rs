@@ -3,11 +3,14 @@ use near_sdk::{
     env::{self},
     ext_contract,
     json_types::U128,
-    near, require, AccountId, Gas, NearToken, Promise, PromiseError,
+    near, require,
+    store::LookupMap,
+    AccountId, Gas, NearToken, Promise, PromiseError, PromiseOrValue,
 };
 use omni_transaction::signer::types::SignatureResponse;
 
 mod chain_signature;
+mod ft;
 pub mod roulette;
 
 // TODO make enum for inside/outside/call bet types
@@ -16,7 +19,7 @@ pub mod roulette;
 #[allow(dead_code)]
 #[ext_contract(my_contract)]
 trait MyContract {
-    fn mpc_callback(&self, account_id: AccountId, spins: Vec<Vec<roulette::Bet>>);
+    fn mpc_callback(&mut self, account_id: AccountId, spins: Vec<Vec<roulette::Bet>>);
 }
 
 #[near(contract_state)]
@@ -25,16 +28,24 @@ pub struct Contract {
     bets: u128,
     house: u128,
     payout: u128,
+    // fts
+    balances: LookupMap<String, LookupMap<AccountId, u128>>,
 }
 
 impl Default for Contract {
     fn default() -> Self {
-        Self {
+        let mut this = Self {
             spins: 0,
             bets: 0,
             house: 100_000_000_000_000_000_000_000_000,
             payout: 0,
-        }
+            balances: LookupMap::new(b"a"),
+        };
+
+        this.balances
+            .set("usdc.fakes.testnet".to_owned(), Some(LookupMap::new(b"b")));
+
+        this
     }
 }
 

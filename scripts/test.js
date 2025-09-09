@@ -55,9 +55,9 @@ async function deployContract(accountId, path) {
   }
 }
 
-async function view(methodName, args = {}) {
+async function view({ contractId = NEAR_CONTRACT_ID, methodName, args = {} }) {
   try {
-    const res = await provider.callFunction(NEAR_CONTRACT_ID, methodName, args);
+    const res = await provider.callFunction(contractId, methodName, args);
     return res;
   } catch (e) {
     console.log('Error calling', methodName, e);
@@ -66,11 +66,18 @@ async function view(methodName, args = {}) {
 
 // contract call
 
-async function call(methodName, args, deposit = 0n, gas = 18000000000000n) {
+async function call({
+  contractId = NEAR_CONTRACT_ID,
+  methodName,
+  args,
+  deposit = 0n,
+  gas = 18000000000000n,
+}) {
   const account = new Account(NEAR_ACCOUNT_ID, provider, signer);
+
   try {
     const res = await account.callFunction({
-      contractId: NEAR_CONTRACT_ID,
+      contractId,
       methodName,
       args,
       deposit,
@@ -90,7 +97,9 @@ const REDEPLOY_CONTRACT = process.env.DEPLOY_CONTRACT || false;
 
 async function getStats() {
   // get stats
-  const [spins, bets, house, payout] = await view('stats');
+  const [spins, bets, house, payout] = await view({
+    methodName: 'stats',
+  });
   console.log(
     'bets:',
     bets,
@@ -118,6 +127,37 @@ async function test() {
     );
     await wait();
   }
+
+  // test fts
+
+  const balanceContract = await view({
+    contractId: 'usdc.fakes.testnet',
+    methodName: 'ft_balance_of',
+    args: { account_id: NEAR_ACCOUNT_ID },
+  });
+  console.log('ft_balance in contract', balanceContract);
+
+  await call({
+    contractId: 'usdc.fakes.testnet',
+    methodName: 'ft_transfer_call',
+    args: {
+      receiver_id: NEAR_CONTRACT_ID,
+      amount: '1000000000',
+      msg: '',
+    },
+    gas: 300000000000000n,
+    deposit: 1n,
+  });
+
+  await wait();
+
+  const balance = await view({
+    methodName: 'usdc_balance',
+    args: { account_id: NEAR_ACCOUNT_ID },
+  });
+  console.log('ft_balance', balance);
+
+  return;
 
   // test calls
 
@@ -202,7 +242,11 @@ async function test() {
         deposit += BigInt(bet.amount);
       }
     }
-    const spinResults = await call('spin', { spins, callback_gas: 3 }, deposit);
+    const spinResults = await call({
+      methodName: 'spin',
+      args: { spins, callback_gas: 3 },
+      deposit,
+    });
     let totalMultiple = 0;
     for (const [i, betResults] of spinResults.entries()) {
       for (const [j, betResult] of betResults.entries()) {
