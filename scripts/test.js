@@ -128,7 +128,81 @@ async function test() {
     await wait();
   }
 
+  // arguments
+
+  const bets = [
+    // Inside Bets
+    {
+      kind: 'Straight',
+      number: 1,
+      amount: parseNearAmount('0.1'),
+    },
+    {
+      kind: 'Split',
+      number: 0,
+      amount: parseNearAmount('0.1'),
+    },
+    {
+      kind: 'Street',
+      number: 0,
+      amount: parseNearAmount('0.1'),
+    },
+    {
+      kind: 'Corner',
+      number: 0,
+      amount: parseNearAmount('0.1'),
+    },
+    {
+      kind: 'SixLine',
+      number: 0,
+      amount: parseNearAmount('0.1'),
+    },
+    // Outside Bets
+    {
+      kind: 'Column',
+      number: 0,
+      amount: parseNearAmount('0.1'),
+    },
+    {
+      kind: 'Dozen',
+      number: 0,
+      amount: parseNearAmount('0.1'),
+    },
+    {
+      kind: 'Red',
+      number: 0,
+      amount: parseNearAmount('0.1'),
+    },
+    {
+      kind: 'Black',
+      number: 0,
+      amount: parseNearAmount('0.1'),
+    },
+    {
+      kind: 'Odd',
+      number: 0,
+      amount: parseNearAmount('0.1'),
+    },
+    {
+      kind: 'Even',
+      number: 0,
+      amount: parseNearAmount('0.1'),
+    },
+    {
+      kind: 'Low',
+      number: 0,
+      amount: parseNearAmount('0.1'),
+    },
+    {
+      kind: 'High',
+      number: 0,
+      amount: parseNearAmount('0.1'),
+    },
+  ];
+  const spins = [bets, bets, bets, bets];
+
   // test fts
+  spins.forEach((s) => s.forEach((b) => (b.amount = '1000000')));
 
   const balanceContract = await view({
     contractId: 'usdc.fakes.testnet',
@@ -142,8 +216,11 @@ async function test() {
     methodName: 'ft_transfer_call',
     args: {
       receiver_id: NEAR_CONTRACT_ID,
-      amount: '1000000000',
-      msg: '',
+      amount: '52000000', // $52
+      msg: JSON.stringify({
+        spins,
+        callback_tgas: 55,
+      }),
     },
     gas: 300000000000000n,
     deposit: 1n,
@@ -165,77 +242,6 @@ async function test() {
   while (true && rounds < 1000) {
     rounds++;
 
-    const bets = [
-      // Inside Bets
-      {
-        kind: 'Straight',
-        number: 1,
-        amount: parseNearAmount('0.1'),
-      },
-      {
-        kind: 'Split',
-        number: 0,
-        amount: parseNearAmount('0.1'),
-      },
-      {
-        kind: 'Street',
-        number: 0,
-        amount: parseNearAmount('0.1'),
-      },
-      {
-        kind: 'Corner',
-        number: 0,
-        amount: parseNearAmount('0.1'),
-      },
-      {
-        kind: 'SixLine',
-        number: 0,
-        amount: parseNearAmount('0.1'),
-      },
-      // Outside Bets
-      {
-        kind: 'Column',
-        number: 0,
-        amount: parseNearAmount('0.1'),
-      },
-      {
-        kind: 'Dozen',
-        number: 0,
-        amount: parseNearAmount('0.1'),
-      },
-      {
-        kind: 'Red',
-        number: 0,
-        amount: parseNearAmount('0.1'),
-      },
-      {
-        kind: 'Black',
-        number: 0,
-        amount: parseNearAmount('0.1'),
-      },
-      {
-        kind: 'Odd',
-        number: 0,
-        amount: parseNearAmount('0.1'),
-      },
-      {
-        kind: 'Even',
-        number: 0,
-        amount: parseNearAmount('0.1'),
-      },
-      {
-        kind: 'Low',
-        number: 0,
-        amount: parseNearAmount('0.1'),
-      },
-      {
-        kind: 'High',
-        number: 0,
-        amount: parseNearAmount('0.1'),
-      },
-    ];
-    const spins = [bets, bets, bets, bets];
-
     let deposit = BigInt('0');
     for (const bets of spins) {
       for (const bet of bets) {
@@ -243,8 +249,8 @@ async function test() {
       }
     }
     const spinResults = await call({
-      methodName: 'spin',
-      args: { spins, callback_gas: 3 },
+      methodName: 'spin_with_near',
+      args: { spins, callback_tgas: 3 },
       deposit,
     });
     let totalMultiple = 0;

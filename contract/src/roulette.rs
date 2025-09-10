@@ -1,5 +1,6 @@
 use crate::*;
 
+#[derive(Debug)]
 #[near(serializers = [json, borsh])]
 pub enum BetKind {
     // Inside Bets
@@ -19,6 +20,7 @@ pub enum BetKind {
     High,
 }
 
+#[derive(Debug)]
 #[near(serializers = [json, borsh])]
 pub struct Bet {
     pub kind: BetKind,

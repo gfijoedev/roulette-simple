@@ -1,9 +1,11 @@
+use std::str::FromStr;
+
 use hex::encode;
 use near_sdk::{
     env::{self},
     ext_contract,
     json_types::U128,
-    near, require,
+    log, near, require, serde, serde_json,
     store::LookupMap,
     AccountId, Gas, NearToken, Promise, PromiseError, PromiseOrValue,
 };
@@ -19,7 +21,12 @@ pub mod roulette;
 #[allow(dead_code)]
 #[ext_contract(my_contract)]
 trait MyContract {
-    fn mpc_callback(&mut self, account_id: AccountId, spins: Vec<Vec<roulette::Bet>>);
+    fn mpc_callback(
+        &mut self,
+        sender_id: AccountId,
+        spins: Vec<Vec<roulette::Bet>>,
+        token_id: AccountId,
+    );
 }
 
 #[near(contract_state)]
@@ -61,50 +68,15 @@ impl Contract {
     }
 
     #[payable]
-    pub fn spin(&mut self, spins: Vec<Vec<roulette::Bet>>, callback_gas: u8) -> Promise {
-        require!(spins.len() < 64, "too many spins");
-
-        let deposit = env::attached_deposit();
-
-        // required_deposit is all bet amounts
-        let mut required_deposit: u128 = 0;
-        for bets in &spins {
-            for bet in bets {
-                required_deposit = required_deposit
-                    .checked_add(bet.amount.as_yoctonear())
-                    .expect("bet.amount overflow");
-
-                // is bet legal
-                require!(roulette::bet_legal(&bet), "illegal bet");
-
-                self.bets += 1;
-            }
-            self.spins += 1;
-        }
-
-        require!(
-            deposit.as_yoctonear() == required_deposit,
-            "deposit != bet amount"
-        );
-
-        self.house = self
-            .house
-            .checked_add(required_deposit)
-            .expect("house overflow");
-
-        // get chain signature
-        let account_id = env::predecessor_account_id();
-        let random_seed = env::random_seed_array();
-
-        chain_signature::internal_request_signature(
-            account_id.to_string(),
-            encode(random_seed),
-            "Ecdsa".to_owned(),
-        )
-        .then(
-            my_contract::ext(env::current_account_id())
-                .with_static_gas(Gas::from_tgas(callback_gas as u64))
-                .mpc_callback(account_id, spins),
+    pub fn spin_with_near(&mut self, spins: Vec<Vec<roulette::Bet>>, callback_tgas: u8) -> Promise {
+        let amount = env::attached_deposit();
+        let sender_id = env::predecessor_account_id();
+        self.spin(
+            spins,
+            sender_id,
+            amount.as_yoctonear(),
+            AccountId::from_str("near").unwrap(),
+            callback_tgas,
         )
     }
 
@@ -112,8 +84,9 @@ impl Contract {
     pub fn mpc_callback(
         &mut self,
         #[callback_result] call_result: Result<SignatureResponse, PromiseError>,
-        account_id: AccountId,
+        sender_id: AccountId,
         spins: Vec<Vec<roulette::Bet>>,
+        token_id: AccountId, // payout token
     ) -> Vec<Vec<(bool, u8, bool, u8)>> {
         let mut results: Vec<Vec<(bool, u8, bool, u8)>> = vec![];
         match call_result {
@@ -152,7 +125,14 @@ impl Contract {
 
                 self.house = self.house.checked_sub(payout).expect("house empty");
                 self.payout = self.payout.checked_add(payout).expect("paid overflow");
-                Promise::new(account_id).transfer(NearToken::from_yoctonear(payout));
+
+                match token_id.as_str() {
+                    "near" => Promise::new(sender_id).transfer(NearToken::from_yoctonear(payout)),
+                    _ => ft::ft_contract::ext(token_id)
+                        .with_static_gas(Gas::from_tgas(50))
+                        .with_attached_deposit(NearToken::from_yoctonear(1))
+                        .ft_transfer(sender_id, U128(payout), None),
+                };
 
                 results
             }
@@ -162,5 +142,58 @@ impl Contract {
                 results
             }
         }
+    }
+}
+
+// internal
+
+impl Contract {
+    pub fn spin(
+        &mut self,
+        spins: Vec<Vec<roulette::Bet>>,
+        sender_id: AccountId,
+        amount: u128,
+        token_id: AccountId,
+        callback_tgas: u8,
+    ) -> Promise {
+        require!(spins.len() < 64, "too many spins");
+
+        // required_amount is all bet amounts
+        let mut required_amount: u128 = 0;
+        for bets in &spins {
+            for bet in bets {
+                required_amount = required_amount
+                    .checked_add(bet.amount.as_yoctonear())
+                    .expect("bet.amount overflow");
+
+                // is bet legal
+                require!(roulette::bet_legal(&bet), "illegal bet");
+
+                self.bets += 1;
+            }
+            self.spins += 1;
+        }
+
+        require!(amount == required_amount, "deposit != bet amount");
+
+        self.house = self
+            .house
+            .checked_add(required_amount)
+            .expect("house overflow");
+
+        // get chain signature
+        let account_id = env::predecessor_account_id();
+        let random_seed = env::random_seed_array();
+
+        chain_signature::internal_request_signature(
+            account_id.to_string(),
+            encode(random_seed),
+            "Ecdsa".to_owned(),
+        )
+        .then(
+            my_contract::ext(env::current_account_id())
+                .with_static_gas(Gas::from_tgas(callback_tgas as u64))
+                .mpc_callback(sender_id, spins, token_id),
+        )
     }
 }
