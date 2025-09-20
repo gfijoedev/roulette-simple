@@ -14,6 +14,8 @@ use omni_transaction::signer::types::SignatureResponse;
 mod chain_signature;
 mod ft;
 pub mod roulette;
+mod tokens;
+use tokens::Stats;
 
 // TODO make enum for inside/outside/call bet types
 // see notes/european-roulette-bets.txt
@@ -26,31 +28,40 @@ trait MyContract {
         sender_id: AccountId,
         spins: Vec<Vec<roulette::Bet>>,
         token_id: AccountId,
+        amount: u128,
     );
 }
 
 #[near(contract_state)]
 pub struct Contract {
-    spins: u128,
-    bets: u128,
-    house: u128,
-    payout: u128,
-    // fts
-    balances: LookupMap<String, LookupMap<AccountId, u128>>,
+    tokens: LookupMap<AccountId, Stats>,
 }
 
 impl Default for Contract {
     fn default() -> Self {
         let mut this = Self {
-            spins: 0,
-            bets: 0,
-            house: 100_000_000_000_000_000_000_000_000,
-            payout: 0,
-            balances: LookupMap::new(b"a"),
+            tokens: LookupMap::new(b"a"),
         };
 
-        this.balances
-            .set("usdc.fakes.testnet".to_owned(), Some(LookupMap::new(b"b")));
+        this.tokens.set(
+            AccountId::from_str("near").unwrap(),
+            Some(Stats {
+                spins: 0,
+                bets: 0,
+                house: 100_000_000_000_000_000_000_000_000,
+                payout: 0,
+            }),
+        );
+
+        this.tokens.set(
+            AccountId::from_str("usdc.fakes.testnet").unwrap(),
+            Some(Stats {
+                spins: 0,
+                bets: 0,
+                house: 5122000000,
+                payout: 0,
+            }),
+        );
 
         this
     }
@@ -58,13 +69,8 @@ impl Default for Contract {
 
 #[near]
 impl Contract {
-    pub fn stats(&self) -> (U128, U128, U128, U128) {
-        (
-            U128(self.spins),
-            U128(self.bets),
-            U128(self.house),
-            U128(self.payout),
-        )
+    pub fn stats(&self, token_id: AccountId) -> Stats {
+        *self.tokens.get(&token_id).expect("token not supported")
     }
 
     #[payable]
@@ -87,6 +93,7 @@ impl Contract {
         sender_id: AccountId,
         spins: Vec<Vec<roulette::Bet>>,
         token_id: AccountId, // payout token
+        amount: u128,        // total bet amount
     ) -> Vec<Vec<(bool, u8, bool, u8)>> {
         let mut results: Vec<Vec<(bool, u8, bool, u8)>> = vec![];
         match call_result {
@@ -102,6 +109,8 @@ impl Contract {
 
                 let mut payout: u128 = 0;
 
+                let mut num_bets: u128 = 0;
+                let mut num_spins: u128 = 0;
                 for (i, bets) in spins.iter().enumerate() {
                     let mut spin_result = vec![];
                     for bet in bets {
@@ -119,13 +128,27 @@ impl Contract {
                         }
 
                         spin_result.push((win, number, red, multiple));
+                        num_bets += 1;
                     }
                     results.push(spin_result);
+                    num_spins += 1;
                 }
 
-                self.house = self.house.checked_sub(payout).expect("house empty");
-                self.payout = self.payout.checked_add(payout).expect("paid overflow");
+                // update stats
+                let stats = self.tokens.get(&token_id).expect("token not supported");
+                self.tokens.insert(
+                    token_id.clone(),
+                    Stats {
+                        spins: stats.spins + num_spins,
+                        bets: stats.bets + num_bets,
+                        house: (stats.house + amount)
+                            .checked_sub(payout)
+                            .expect("house empty"),
+                        payout: stats.payout + payout,
+                    },
+                );
 
+                // payout transfer
                 match token_id.as_str() {
                     "near" => Promise::new(sender_id).transfer(NearToken::from_yoctonear(payout)),
                     _ => ft::ft_contract::ext(token_id)
@@ -166,20 +189,11 @@ impl Contract {
                     .checked_add(bet.amount.as_yoctonear())
                     .expect("bet.amount overflow");
 
-                // is bet legal
                 require!(roulette::bet_legal(&bet), "illegal bet");
-
-                self.bets += 1;
             }
-            self.spins += 1;
         }
 
         require!(amount == required_amount, "deposit != bet amount");
-
-        self.house = self
-            .house
-            .checked_add(required_amount)
-            .expect("house overflow");
 
         // get chain signature
         let account_id = env::predecessor_account_id();
@@ -193,7 +207,7 @@ impl Contract {
         .then(
             my_contract::ext(env::current_account_id())
                 .with_static_gas(Gas::from_tgas(callback_tgas as u64))
-                .mpc_callback(sender_id, spins, token_id),
+                .mpc_callback(sender_id, spins, token_id, amount),
         )
     }
 }

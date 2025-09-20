@@ -10,6 +10,7 @@ import { KeyPairSigner } from '@near-js/signers';
 import { KeyPair } from '@near-js/crypto';
 import { parseNearAmount, formatNearAmount } from '@near-js/utils';
 import { parseSeedPhrase } from 'near-seed-phrase';
+import { actionCreators } from '@near-js/transactions';
 
 const wait = async (s = 500) => await new Promise((r) => setTimeout(r, s));
 
@@ -64,6 +65,30 @@ async function view({ contractId = NEAR_CONTRACT_ID, methodName, args = {} }) {
   }
 }
 
+// sign and send
+
+async function signAndSend({
+  contractId = NEAR_CONTRACT_ID,
+  methodName,
+  args,
+  deposit = 0n,
+  gas = 18000000000000n,
+}) {
+  const account = new Account(NEAR_ACCOUNT_ID, provider, signer);
+
+  try {
+    const res = await account.signAndSendTransaction({
+      receiverId: contractId,
+      actions: [actionCreators.functionCall(methodName, args, gas, deposit)],
+      waitUntil: 'FINAL',
+    });
+    // console.log('Call result:', res === '' ? 'no return value' : res);
+    return res;
+  } catch (e) {
+    console.log('Error calling', methodName, e);
+  }
+}
+
 // contract call
 
 async function call({
@@ -90,29 +115,141 @@ async function call({
   }
 }
 
-// test run const
+/*
 
-const VERBOSE = false;
+
+Bet and Spin args
+
+
+*/
+
+const ALL_BETS = [
+  // Inside Bets
+  {
+    kind: 'Straight',
+    number: 1,
+    amount: parseNearAmount('0.1'),
+  },
+  {
+    kind: 'Split',
+    number: 0,
+    amount: parseNearAmount('0.1'),
+  },
+  {
+    kind: 'Street',
+    number: 0,
+    amount: parseNearAmount('0.1'),
+  },
+  {
+    kind: 'Corner',
+    number: 0,
+    amount: parseNearAmount('0.1'),
+  },
+  {
+    kind: 'SixLine',
+    number: 0,
+    amount: parseNearAmount('0.1'),
+  },
+  // Outside Bets
+  {
+    kind: 'Column',
+    number: 0,
+    amount: parseNearAmount('0.1'),
+  },
+  {
+    kind: 'Dozen',
+    number: 0,
+    amount: parseNearAmount('0.1'),
+  },
+  {
+    kind: 'Red',
+    number: 0,
+    amount: parseNearAmount('0.1'),
+  },
+  {
+    kind: 'Black',
+    number: 0,
+    amount: parseNearAmount('0.1'),
+  },
+  {
+    kind: 'Odd',
+    number: 0,
+    amount: parseNearAmount('0.1'),
+  },
+  {
+    kind: 'Even',
+    number: 0,
+    amount: parseNearAmount('0.1'),
+  },
+  {
+    kind: 'Low',
+    number: 0,
+    amount: parseNearAmount('0.1'),
+  },
+  {
+    kind: 'High',
+    number: 0,
+    amount: parseNearAmount('0.1'),
+  },
+];
+
+const SPIN_ARG = [ALL_BETS, ALL_BETS, ALL_BETS, ALL_BETS];
+
+/*
+
+
+Test and util
+
+
+*/
+
 const REDEPLOY_CONTRACT = process.env.DEPLOY_CONTRACT || false;
 
-async function getStats() {
+async function getStats(ft = true) {
   // get stats
-  const [spins, bets, house, payout] = await view({
+  const { spins, bets, house, payout } = await view({
     methodName: 'stats',
+    args: {
+      token_id: 'usdc.fakes.testnet',
+    },
   });
   console.log(
     'bets:',
     bets,
     '\t',
     'wagered:',
-    bets / 10,
+    ft ? bets : bets / 10,
     '\t',
     'house:',
-    formatNearAmount(house, 4),
+    ft ? house : formatNearAmount(house, 4),
     '\t',
     'payout:',
-    formatNearAmount(payout, 4),
+    ft ? payout / 1000000 : formatNearAmount(payout, 4),
   );
+}
+
+function printSpinResults(spinResults, verbose = false) {
+  let totalMultiple = 0;
+  for (const [i, betResults] of spinResults.entries()) {
+    for (const [j, betResult] of betResults.entries()) {
+      const [win, number, red, multiple] = betResult;
+      const payoutMultiple = win ? multiple + 1 : 0;
+      if (verbose) {
+        console.log(
+          'Bet:',
+          SPIN_ARG[i][j].kind,
+          '\t\tResult:',
+          number,
+          red ? 'red' : 'black',
+          '\t\tPayout:',
+          payoutMultiple,
+          'x bet',
+        );
+      }
+      totalMultiple += payoutMultiple;
+    }
+  }
+  console.log('total payout: ', totalMultiple);
 }
 
 async function test() {
@@ -128,111 +265,56 @@ async function test() {
     await wait();
   }
 
-  // arguments
-
-  const bets = [
-    // Inside Bets
-    {
-      kind: 'Straight',
-      number: 1,
-      amount: parseNearAmount('0.1'),
-    },
-    {
-      kind: 'Split',
-      number: 0,
-      amount: parseNearAmount('0.1'),
-    },
-    {
-      kind: 'Street',
-      number: 0,
-      amount: parseNearAmount('0.1'),
-    },
-    {
-      kind: 'Corner',
-      number: 0,
-      amount: parseNearAmount('0.1'),
-    },
-    {
-      kind: 'SixLine',
-      number: 0,
-      amount: parseNearAmount('0.1'),
-    },
-    // Outside Bets
-    {
-      kind: 'Column',
-      number: 0,
-      amount: parseNearAmount('0.1'),
-    },
-    {
-      kind: 'Dozen',
-      number: 0,
-      amount: parseNearAmount('0.1'),
-    },
-    {
-      kind: 'Red',
-      number: 0,
-      amount: parseNearAmount('0.1'),
-    },
-    {
-      kind: 'Black',
-      number: 0,
-      amount: parseNearAmount('0.1'),
-    },
-    {
-      kind: 'Odd',
-      number: 0,
-      amount: parseNearAmount('0.1'),
-    },
-    {
-      kind: 'Even',
-      number: 0,
-      amount: parseNearAmount('0.1'),
-    },
-    {
-      kind: 'Low',
-      number: 0,
-      amount: parseNearAmount('0.1'),
-    },
-    {
-      kind: 'High',
-      number: 0,
-      amount: parseNearAmount('0.1'),
-    },
-  ];
-  const spins = [bets, bets, bets, bets];
-
   // test fts
-  spins.forEach((s) => s.forEach((b) => (b.amount = '1000000')));
+  SPIN_ARG.forEach((s) => s.forEach((b) => (b.amount = '1000000')));
 
   const balanceContract = await view({
     contractId: 'usdc.fakes.testnet',
     methodName: 'ft_balance_of',
-    args: { account_id: NEAR_ACCOUNT_ID },
+    args: { account_id: NEAR_CONTRACT_ID },
   });
-  console.log('ft_balance in contract', balanceContract);
+  console.log('ft_balance contract:', balanceContract);
 
-  await call({
-    contractId: 'usdc.fakes.testnet',
-    methodName: 'ft_transfer_call',
-    args: {
-      receiver_id: NEAR_CONTRACT_ID,
-      amount: '52000000', // $52
-      msg: JSON.stringify({
-        spins,
-        callback_tgas: 55,
-      }),
-    },
-    gas: 300000000000000n,
-    deposit: 1n,
-  });
+  /*
 
-  await wait();
 
-  const balance = await view({
-    methodName: 'usdc_balance',
-    args: { account_id: NEAR_ACCOUNT_ID },
-  });
-  console.log('ft_balance', balance);
+  Testing
+
+
+  */
+
+  while (true) {
+    let spinResults = await signAndSend({
+      contractId: 'usdc.fakes.testnet',
+      methodName: 'ft_transfer_call',
+      args: {
+        receiver_id: NEAR_CONTRACT_ID,
+        amount: '52000000', // $52
+        msg: JSON.stringify({
+          spins: SPIN_ARG,
+          callback_tgas: 55,
+        }),
+      },
+      gas: 300000000000000n,
+      deposit: 1n,
+    });
+
+    spinResults = JSON.parse(
+      atob(
+        spinResults.receipts_outcome.filter(
+          ({ outcome }) =>
+            outcome.executor_id === NEAR_CONTRACT_ID &&
+            outcome.status.SuccessValue.length > 16,
+        )[0].outcome.status.SuccessValue,
+      ),
+    );
+
+    printSpinResults(spinResults);
+
+    await wait();
+
+    await getStats();
+  }
 
   return;
 
@@ -243,37 +325,17 @@ async function test() {
     rounds++;
 
     let deposit = BigInt('0');
-    for (const bets of spins) {
+    for (const bets of SPIN_ARG) {
       for (const bet of bets) {
         deposit += BigInt(bet.amount);
       }
     }
     const spinResults = await call({
       methodName: 'spin_with_near',
-      args: { spins, callback_tgas: 3 },
+      args: { spins: SPIN_ARG, callback_tgas: 3 },
       deposit,
     });
-    let totalMultiple = 0;
-    for (const [i, betResults] of spinResults.entries()) {
-      for (const [j, betResult] of betResults.entries()) {
-        const [win, number, red, multiple] = betResult;
-        const payoutMultiple = win ? multiple + 1 : 0;
-        if (VERBOSE) {
-          console.log(
-            'Bet:',
-            spins[i][j].kind,
-            '\t\tResult:',
-            number,
-            red ? 'red' : 'black',
-            '\t\tPayout:',
-            payoutMultiple,
-            'x bet',
-          );
-        }
-        totalMultiple += payoutMultiple;
-      }
-    }
-    console.log('total payout: ', totalMultiple);
+    printSpinResults(spinResults);
 
     await wait();
     await getStats();
